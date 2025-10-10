@@ -1,0 +1,10 @@
+# Pasta de dependências do Node
+/node_modules
+
+# Logs, Cache e Configurações de Compilação
+npm-debug.log*
+yarn-error.log
+.DS_Store
+dist
+out
+.env
