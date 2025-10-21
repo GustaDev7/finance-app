@@ -248,21 +248,33 @@ export default function BudgetManager() {
     try {
       setLoading(true);
       
-      // Buscar orçamentos (simulado - você pode implementar no Supabase)
-      const mockBudgets = [
-        { id: 1, category: 'Alimentação', amount: 1500, period: 'monthly', description: 'Gastos com comida e bebida' },
-        { id: 2, category: 'Transporte', amount: 1000, period: 'monthly', description: 'Combustível, transporte público' },
-        { id: 3, category: 'Lazer', amount: 600, period: 'monthly', description: 'Entretenimento e diversão' }
-      ];
-      setBudgets(mockBudgets);
+      // Obter usuário autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.warn("Usuário não logado. Não é possível buscar orçamentos.");
+        setLoading(false);
+        return;
+      }
 
-      // Buscar transações reais
-      const { data: transactionsData, error } = await supabase
+      // Buscar orçamentos do usuário
+      const { data: budgetsData, error: budgetsError } = await supabase
+        .from('budgets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (budgetsError) throw budgetsError;
+      setBudgets(budgetsData || []);
+
+      // Buscar transações de despesas do usuário
+      const { data: transactionsData, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
+        .eq('user_id', user.id)
         .eq('type', 'expense');
 
-      if (error) throw error;
+      if (transactionsError) throw transactionsError;
       setTransactions(transactionsData || []);
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
@@ -287,22 +299,45 @@ export default function BudgetManager() {
 
   const handleSaveBudget = async (budgetData) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error("Usuário não autenticado");
+        return;
+      }
+
       if (budgetData.id) {
         // Atualizar orçamento existente
-        setBudgets(prev => prev.map(b => 
-          b.id === budgetData.id ? budgetData : b
-        ));
+        const { error } = await supabase
+          .from('budgets')
+          .update({
+            category: budgetData.category,
+            amount: budgetData.amount,
+            period: budgetData.period,
+            description: budgetData.description
+          })
+          .eq('id', budgetData.id)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
       } else {
         // Criar novo orçamento
-        const newBudget = {
-          ...budgetData,
-          id: Date.now() // Simulado - use UUID real em produção
-        };
-        setBudgets(prev => [...prev, newBudget]);
+        const { error } = await supabase
+          .from('budgets')
+          .insert([{
+            user_id: user.id,
+            category: budgetData.category,
+            amount: budgetData.amount,
+            period: budgetData.period,
+            description: budgetData.description
+          }]);
+
+        if (error) throw error;
       }
       
       setDialogOpen(false);
       setEditingBudget(null);
+      fetchData();
     } catch (error) {
       console.error('Erro ao salvar orçamento:', error);
     }
@@ -310,7 +345,21 @@ export default function BudgetManager() {
 
   const handleDeleteBudget = async (budgetId) => {
     try {
-      setBudgets(prev => prev.filter(b => b.id !== budgetId));
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error("Usuário não autenticado");
+        return;
+      }
+
+      const { error } = await supabase
+        .from('budgets')
+        .delete()
+        .eq('id', budgetId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      fetchData();
     } catch (error) {
       console.error('Erro ao deletar orçamento:', error);
     }
@@ -450,3 +499,4 @@ export default function BudgetManager() {
     </div>
   );
 }
+
